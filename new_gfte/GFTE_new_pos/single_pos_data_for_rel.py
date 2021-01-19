@@ -12,6 +12,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from torch_geometric.utils.convert import to_networkx
 
+from new_gfte.rebuild_table import get_same_rows_dict, group_node
 
 '''
 by: billyx@synnex.com [lowbee_coder@sina.com]
@@ -209,11 +210,19 @@ class GFTE_POS_DATASET(Dataset):
         #对rel-list 处理，做成{} key:p1-p2  value:1 or 0
         rel_dict = {}
         for rel in rel_list:
-            rel_items = rel.split("	")
+            rel_items = rel.split("\t")
             row_col = rel_items[2].split(":")[0]
             rel_dict[str(rel_items[0]+"_"+str(rel_items[1]))] = 1 if row_col==str(1) else 2
             rel_dict[str(rel_items[1] + "_" + str(rel_items[0]))] = 1 if row_col == str(1) else 2
             y = []
+        for i in rel_dict.keys():
+            print(i)
+        print(edge)
+        # print("--------------------------------------")
+        # for i in range(edge.size()[1]):
+        #     #y.append(self.check_row(edge[0, i], edge[1, i], tbpos))  # check 是否同行
+        #     print(edge[0][i].item(),"__",edge[1][i].item())
+
         for i in range(edge.size()[1]):
             #y.append(self.check_row(edge[0, i], edge[1, i], tbpos))  # check 是否同行
             y.append(self.check_rel_row(edge[0, i],edge[1, i],tbpos,rel_dict))
@@ -261,7 +270,7 @@ class GFTE_POS_DATASET(Dataset):
 
 
 
-    def get(self,idx):
+    def get_knn(self,idx):
         structs,chunks,rel_list = self.reallab(idx)
 
         cl_pos = self.cl_pos_limit(chunks) #得到整个表格的左上，右下；整个table长宽
@@ -282,11 +291,95 @@ class GFTE_POS_DATASET(Dataset):
         x = torch.tensor(x)
         pos = torch.FloatTensor(pos)
         data = Data(x=x,pos=pos)
+
         data = self.graph_transform(data) #构造图连接此时会生成edge_index
 
 
         y = self.cal_rel_lab(data,tbpos,rel_list)
         data.y = torch.LongTensor(y)
+        return data
+
+    #通过rel 与strcture 等文件构建边的关系
+    def get_node_relation(self,idx):
+        edge_index_start = []
+        edge_index_end = []
+        structs, chunks, rel_list = self.reallab(idx)
+        edge_set = set()
+
+        for rel in rel_list:
+            rel_split = rel.split("\t")
+            edge_set.add(str(rel_split[0])+"_"+str(rel_split[1]))
+            edge_set.add(str(rel_split[1])+"_"+str(rel_split[0]))
+        for struct in structs:
+            id = struct['id']
+            s_row,e_row = struct['start_row'],struct['end_row']
+            s_col,e_col = struct['start_col'],struct['start_col']
+            if s_row!=e_row or s_col != e_col:
+                logging.warning("id :",id,' over col or row')
+
+            nr_l = s_row - 1
+            nr_r = e_row + 1
+
+            nc_u = s_col - 1
+            nc_d = e_row + 1
+
+            for struct1 in structs:
+                r_s,r_e = struct1['start_row'],struct['end_row']
+                c_s,c_e = struct1['start_col'],struct['end_col']
+
+                if s_row == e_row and s_col==e_row:
+                    if r_s==r_e and c_s==c_e:
+                       if (r_s==nr_l and c_s in [s_col,nc_u,nc_d] ) or(r_s==nr_r and c_s in [s_col,nc_u,nc_d]) or(r_s==s_row and c_s in [nc_u,nc_d]):
+                           id1 = struct1['id']
+                           edge_set.add(str(id)+"_"+str(id1))
+                           edge_set.add(str(id1) + "_" + str(id))
+                       else:
+                           pass
+                else:
+                    pass
+
+        for item in edge_set:
+            items = item.split("_")
+            edge_index_start.append(int(items[0]))
+            edge_index_end.append(int(items[1]))
+        return([edge_index_start,edge_index_end])
+
+
+    def get_rel_data(self,idx):
+        structs, chunks, rel_list = self.reallab(idx)
+
+        cl_pos = self.cl_pos_limit(chunks)  # 得到整个表格的左上，右下；整个table长宽
+        structs = self.remove_empty_cell(structs)  # 已经通过id排过序了
+        x = list()  # Data 的 X
+        pos = list()
+        tbpos = list()
+        id = 0
+        for st in structs:
+            # id = st['id']
+            chk = chunks[id]
+            pos_feature = self.pos_feater(chk, cl_pos)
+            x.append(pos_feature)
+            pos.append(pos_feature[4:6])  # 中心点与宽高
+            # pos.append(pos_feature[:4]) #归一化坐标
+            tbpos.append([st["start_row"], st["end_row"], st["start_col"], st["end_col"]])
+            id += 1
+        x = torch.tensor(x)
+        pos = torch.FloatTensor(pos)
+        data = Data(x=x, pos=pos)
+
+        #data = self.graph_transform(data)  # 构造图连接此时会生成edge_index
+
+        edge_idx = self.get_node_relation(idx)
+        edge_idx = torch.tensor(edge_idx).int()
+        data.edge_index = edge_idx
+        y = self.cal_rel_lab(data, tbpos, rel_list)
+        data.y = torch.LongTensor(y)
+        return data
+
+    def get(self, idx):
+
+        #data = self.get_rel_data(idx)
+        data = self.get_knn(idx)
         return data
 
 
@@ -321,10 +414,16 @@ if __name__ == "__main__":
     pk = torch.cat((dataset[0].edge_index, (dataset[0]['y']).unsqueeze(0)), 0)
     edge_index = edge_index.t()
     print(edge_index)
-    print(pk.T)
+    print((pk.T).tolist())
 
-    for i in range (20):
-        g = to_networkx(dataset[i])
-        nx.draw(g)
-        plt.show()
+
+
+    #
+    # for i in range (20):
+    #     g = to_networkx(dataset[i])
+    #     nx.draw(g)
+    #     plt.show()
+
+    d = get_same_rows_dict(dataset,dataset[0]['y'])
+    group_node(d)
 
