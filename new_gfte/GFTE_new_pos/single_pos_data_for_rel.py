@@ -44,7 +44,7 @@ class GFTE_POS_DATASET(Dataset):
     2、直接加载json目录读取json list
     3、官方在dataset时加载了json,或生成了了imglist( dump到json) 此处摒弃
     '''
-    def __init__(self,root_path,transform=None,pre_transform=None):
+    def __init__(self,root_path,transform=None,pre_transform=None,row_colum = True):
         super(GFTE_POS_DATASET,self).__init__(root_path,transform,pre_transform)
         self.root_path = root_path
         self.json_file_list = os.listdir(os.path.join(root_path,"structure"))
@@ -52,6 +52,7 @@ class GFTE_POS_DATASET(Dataset):
         self.imglist = os.listdir(os.path.join(root_path,"mytrain")) #img
         #此处是使用check后的list
         self.imglist = self.check_all()
+        self.row_colum = row_colum
         self.graph_transform = GT.KNNGraph(k=6) #使用pos创建k-nn图 Creates a k-NN graph based on node positions :obj:`pos`.
 
 
@@ -215,17 +216,24 @@ class GFTE_POS_DATASET(Dataset):
             rel_dict[str(rel_items[0]+"_"+str(rel_items[1]))] = 1 if row_col==str(1) else 2
             rel_dict[str(rel_items[1] + "_" + str(rel_items[0]))] = 1 if row_col == str(1) else 2
             y = []
-        for i in rel_dict.keys():
-            print(i)
-        print(edge)
+#this check keys in dict
+        # for i in rel_dict.keys():
+        #     print(i)
+        # print(edge)
+
+
         # print("--------------------------------------")
         # for i in range(edge.size()[1]):
         #     #y.append(self.check_row(edge[0, i], edge[1, i], tbpos))  # check 是否同行
         #     print(edge[0][i].item(),"__",edge[1][i].item())
 
         for i in range(edge.size()[1]):
+
             #y.append(self.check_row(edge[0, i], edge[1, i], tbpos))  # check 是否同行
-            y.append(self.check_rel_row(edge[0, i],edge[1, i],tbpos,rel_dict))
+            if self.row_colum:
+                y.append(self.check_rel_row(edge[0, i],edge[1, i],tbpos,rel_dict))
+            else:
+                y.append(self.check_rel_colum(edge[0, i], edge[1, i], tbpos, rel_dict))
         return y
 
 
@@ -246,7 +254,7 @@ class GFTE_POS_DATASET(Dataset):
         if key in rel_dict.keys():
             y = 1 if rel_dict[key] == 2 else 0
         else:
-            y=0
+            y=self.check_colum(start_node,end_node,tbpos)
         return y
 
 
@@ -258,7 +266,7 @@ class GFTE_POS_DATASET(Dataset):
         if ed_start>=st_start and ed_end<=st_end:
             return 1
         return 0
-
+#-----------
     def check_colum(self,start,end,tbpos):
         st_start, st_end = tbpos[start][2], tbpos[start][3]
         ed_start, ed_end = tbpos[end][2], tbpos[end][3]
@@ -402,14 +410,15 @@ if __name__ == "__main__":
     #     print(x_min,x_max,y_min,y_max)
     rootPath = r"F:\imgs\SciTSR\train"
     test = "Y"
-    dataset = GFTE_POS_DATASET(rootPath,None,None)
-    print(dataset[0])
-    print(dataset[0].keys)
-    print(dataset[0]['edge_index'])
-    print(dataset[0]['y'])
-    print("Y长度",len(dataset[0]['y']))
-    print(sum(dataset[0]['y']))
-
+    row_column = False
+    dataset = GFTE_POS_DATASET(rootPath,None,None,row_column)
+    # print(dataset[0])
+    # print(dataset[0].keys)
+    # print(dataset[0]['edge_index'])
+    # print(dataset[0]['y'])
+    # print("Y长度",len(dataset[0]['y']))
+    # print(sum(dataset[0]['y']))
+    #
     edge_index = dataset[0]['edge_index']
     pk = torch.cat((dataset[0].edge_index, (dataset[0]['y']).unsqueeze(0)), 0)
     edge_index = edge_index.t()
@@ -418,12 +427,11 @@ if __name__ == "__main__":
 
 
 
-    #
-    # for i in range (20):
+    # for i in range (1):
     #     g = to_networkx(dataset[i])
     #     nx.draw(g)
     #     plt.show()
 
     d = get_same_rows_dict(dataset,dataset[0]['y'])
-    group_node(d)
+    group_node(d,dataset[0].x.tolist(),row_column)
 
