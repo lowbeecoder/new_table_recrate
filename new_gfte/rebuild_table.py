@@ -228,6 +228,10 @@ def table_r(row_dict:dict,colum_dict:dict,x:list):
                 org_node.add(add_node)
     pass
 
+
+
+
+
 if __name__ == "__main__":
 
     a = {'1_1','1_0','2_1','0_7','2_6'}

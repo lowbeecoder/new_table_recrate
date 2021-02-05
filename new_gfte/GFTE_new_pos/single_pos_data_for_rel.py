@@ -419,11 +419,11 @@ if __name__ == "__main__":
     # print("Y长度",len(dataset[0]['y']))
     # print(sum(dataset[0]['y']))
     #
-    edge_index = dataset[0]['edge_index']
-    pk = torch.cat((dataset[0].edge_index, (dataset[0]['y']).unsqueeze(0)), 0)
-    edge_index = edge_index.t()
-    print(edge_index)
-    print((pk.T).tolist())
+    # edge_index = dataset[0]['edge_index']
+    # pk = torch.cat((dataset[0].edge_index, (dataset[0]['y']).unsqueeze(0)), 0)
+    # edge_index = edge_index.t()
+    # print(edge_index)
+    # print((pk.T).tolist())
 
 
 
@@ -434,4 +434,7 @@ if __name__ == "__main__":
 
     d = get_same_rows_dict(dataset,dataset[0]['y'])
     group_node(d,dataset[0].x.tolist(),row_column)
+
+    print(dataset[0].x.tolist())
+    print(len(dataset[0].x.tolist()))
 
